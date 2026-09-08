@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Ephemeral LXC dashboard</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <header>
+    <h1>Ephemeral LXC</h1>
+    <nav>
+      <button data-tab="active" class="active">Active</button>
+      <button data-tab="history">History</button>
+      <button data-tab="scripts">Scripts</button>
+    </nav>
+    <span class="spacer"></span>
+    <button class="btn" id="refresh">Refresh</button>
+    <button class="btn" id="logout">Log out</button>
+  </header>
+
+  <main>
+    <section id="tab-active"></section>
+    <section id="tab-history" hidden></section>
+    <section id="tab-scripts" hidden></section>
+  </main>
+
+  <div class="drawer-backdrop" id="backdrop"></div>
+  <aside class="drawer" id="drawer">
+    <header>
+      <h2 id="drawer-title">Container</h2>
+      <button class="btn" id="drawer-close">Close</button>
+    </header>
+    <div class="body" id="drawer-body"></div>
+  </aside>
+
+  <div class="toast" id="toast"></div>
+
+  <script src="/app.js"></script>
+</body>
+</html>
