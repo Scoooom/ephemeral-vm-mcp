@@ -1,6 +1,10 @@
 # /etc/systemd/system/ephemeral-vm-mcp.service
-# Runs the MCP server with the streamable-HTTP transport (localhost only).
-# The Cloudflare tunnel is the sole external ingress.
+# Runs the MCP server with the streamable-HTTP transport on 127.0.0.1:8788 and
+# the web dashboard on 127.0.0.1:8789 (both localhost only, one process). The
+# Cloudflare tunnel is the sole external ingress for both.
+#
+# Dashboard env (DASHBOARD_SESSION_SECRET etc.) goes in the same .env file;
+# set DASHBOARD_ENABLED=0 there to run the MCP transport without the dashboard.
 #
 #   cp deploy/ephemeral-vm-mcp.service /etc/systemd/system/
 #   systemctl daemon-reload && systemctl enable --now ephemeral-vm-mcp

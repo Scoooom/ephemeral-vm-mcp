@@ -6,6 +6,10 @@
 #
 # Run deploy/setup-tunnel.sh to create the tunnel, repoint the DNS record, write
 # this file, and install the cloudflared service.
+#
+# Two hostnames on one tunnel:
+#   mcpprox.scooom.com  -> MCP streamable-HTTP transport (bearer + CF Access)
+#   proxweb.scooom.com  -> web dashboard (its own passkey auth; CF Access optional)
 
 tunnel: <tunnel-id>
 credentials-file: /root/.cloudflared/<tunnel-id>.json
@@ -13,4 +17,6 @@ credentials-file: /root/.cloudflared/<tunnel-id>.json
 ingress:
   - hostname: mcpprox.scooom.com
     service: http://127.0.0.1:8788
+  - hostname: proxweb.scooom.com
+    service: http://127.0.0.1:8789
   - service: http_status:404
