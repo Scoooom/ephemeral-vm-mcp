@@ -2,7 +2,8 @@
 
 An MCP server that provisions throwaway **LXC containers** on Proxmox `pve2`,
 tracks their lifecycle in a local SQLite DB, and runs a one-shot post-create
-script or a headless `claude -p` task on each over SSH.
+script or a live-monitorable Claude Code task (Remote Control, in detached tmux)
+on each over SSH.
 
 Runs on the dedicated `mcpProx` container. Talks to Proxmox over the REST API
 only (`https://pve2.scooom.com:8006`, token auth). Provisions containers on the
@@ -17,7 +18,7 @@ only (`https://pve2.scooom.com:8006`, token auth). Provisions containers on the
 | `src/proxmox/` | token-auth axios client, UPID task polling, `LxcApi`, `Discovery` |
 | `src/net/ipalloc.ts` | transactional lowest-free-CID allocation |
 | `src/ssh/exec.ts` | the single `execCommand` SSH primitive |
-| `src/tools/` | the 23 MCP tools |
+| `src/tools/` | the 24 MCP tools |
 | `src/services/` | shared guarded logic (`requireOwnedVm`, lifecycle, status) used by both the tools and the web API |
 | `src/transports/` | stdio + streamable-HTTP (bearer-gated, localhost) |
 | `src/web/` + `public/` | the web dashboard (see below) |
@@ -54,7 +55,9 @@ Discovery: `list_templates`, `list_nodes`, `list_storage`, `list_active_vms`,
 
 Mutating: `clone_vm`, `start_vm`, `stop_vm`, `reboot_vm`, `destroy_vm`,
 `exec_command`, `set_post_create_script`, `run_post_create_script`,
-`run_claude_task`, `create_snapshot`, `rollback_snapshot`.
+`create_snapshot`, `rollback_snapshot`.
+
+Claude Code: `run_claude_task`, `get_claude_task_status`.
 
 Deploy: `create_github_repo`, `deploy_app`, `check_tunnel_status`.
 
@@ -62,6 +65,48 @@ Deploy: `create_github_repo`, `deploy_app`, `check_tunnel_status`.
 including `destroy_vm` — refuses any VMID that is not an active
 `ephemeral-mcp`-owned row in the local DB, so it can never touch a production
 container.
+
+### Live-monitorable Claude Code tasks
+
+`run_claude_task(vmid, prompt, timeout_seconds?)` runs Claude Code on a
+container so you can **watch or steer it live from a phone / `claude.ai/code`**,
+not just read a final result.
+
+- It launches `claude --remote-control '<prompt>' --permission-mode
+  bypassPermissions` inside a **detached `tmux` session** (`claude-task-<vmid>`)
+  under `/root/claude-task-<vmid>/`, so the run survives the SSH connection
+  closing. Remote Control can't be combined with `claude -p`, so this is a
+  genuine interactive session, not a headless one.
+- Right after launch it scrapes the **Remote Control session URL** from the tmux
+  pane and stores it on `vms.session_url` and the `claude_tasks` row; the
+  dashboard drawer shows it as an "open live session" link. The tool returns
+  immediately — the task keeps running in tmux.
+- Repo creation (`gh repo create …`) happens **inside** the Claude Code run,
+  driven by the prompt — `gh` is already authenticated in the CT113 template.
+
+**Completion detection.** A `-p` run exited and printed a result; an RC session
+never exits on its own. So the prompt is wrapped with a "task harness protocol"
+instructing Claude Code to write a one-line JSON **sentinel file** as its final
+action:
+
+```
+/root/claude-task-<vmid>/.done
+{"status":"success"|"failure","repo_url":…,"tunnel_hostname":…,"summary":…}
+```
+
+`get_claude_task_status(vmid)` polls for that file (and returns a live tmux-pane
+tail while running). A task is also finalized if its **tmux session disappears**
+(→ `failed`) or it exceeds **`CLAUDE_TASK_TIMEOUT_SECONDS`** (default 3600;
+→ `timed_out`, tmux session killed). That wall-clock timeout is the safety valve
+`--max-turns` used to be — **`--max-turns` is headless-only and is not passed to
+an RC session.** A background reaper (every 60s) applies the same checks so a
+task still resolves even if nothing calls `get_claude_task_status`.
+
+When a completed task's sentinel names a `repo_url`, a `deployments` row is
+recorded (and, if it also names a `tunnel_hostname`, a real `check_tunnel_status`
+is run) so the dashboard shows the same repo/tunnel state it does for
+`deploy_app`. Poll `check_tunnel_status` until healthy before declaring a
+deploy-style task done.
 
 ### Deploying an app
 
@@ -114,7 +159,7 @@ start without `DASHBOARD_SESSION_SECRET`.
 Verified end-to-end against `pve2` via `npm run smoke`: clone,
 configure (static IP / resources / tags), start, `exec_command`,
 `run_post_create_script` (+ one-shot guard), `create_snapshot`,
-`run_claude_task` (real `claude -p`), `rollback_snapshot`, `stop`, `destroy_vm`,
+`rollback_snapshot`, `stop`, `destroy_vm`,
 the ownership gate (`destroy_vm` on a production CT is refused), UPID task
 polling, IP allocation, pool auto-creation, and the full deploy loop
 (`create_github_repo` → `deploy_app` → `check_tunnel_status` against a
@@ -132,5 +177,9 @@ taken first):
 2. Its script no longer calls `systemctl restart ssh.*` (that deadlocked against
    its own `Before=` ordering). Ordering alone is sufficient.
 
-`run_claude_task` runs `claude -p` as root with `IS_SANDBOX=1` (Claude Code
-refuses `bypassPermissions` as root without it).
+`run_claude_task` runs `claude` as root with `IS_SANDBOX=1` (Claude Code
+refuses `bypassPermissions` as root without it). The container must have `tmux`
+and the `claude` CLI on `PATH` — `run_claude_task` fails fast if either is
+missing. If the RC session URL can't be parsed from the pane (Claude Code
+renders it differently across versions), the task still runs — attach with
+`tmux attach -t claude-task-<vmid>` on the container to find it.

@@ -4,6 +4,7 @@ import { createServer } from "./server.js";
 import { startStdio } from "./transports/stdio.js";
 import { startHttp } from "./transports/http.js";
 import { startDashboard } from "./web/dashboard.js";
+import { startClaudeTaskReaper } from "./services/claudeTask.js";
 import { logger } from "./logger.js";
 
 async function main(): Promise<void> {
@@ -23,6 +24,10 @@ async function main(): Promise<void> {
   } else {
     await startStdio(createServer(ctx));
   }
+
+  // Finalize run_claude_task sessions that completed, died, or blew their
+  // wall-clock budget while nothing was polling get_claude_task_status.
+  startClaudeTaskReaper(ctx);
 
   const shutdown = () => {
     logger.info("shutting down");

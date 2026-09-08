@@ -106,4 +106,39 @@ export const migrations: Migration[] = [
       CREATE INDEX IF NOT EXISTS idx_deployments_vm_id ON deployments(vm_id);
     `,
   },
+  {
+    version: 4,
+    name: "live-monitorable claude tasks (Remote Control)",
+    sql: /* sql */ `
+      -- The Remote Control session URL for the container's most recent
+      -- run_claude_task launch. Surfaced as a clickable link in the dashboard
+      -- drawer so the user can open the live session from a phone / claude.ai.
+      ALTER TABLE vms ADD COLUMN session_url TEXT;
+
+      -- One row per run_claude_task launch. run_claude_task no longer blocks to
+      -- completion (RC sessions don't exit like 'claude -p' did) — it launches a
+      -- detached tmux session and returns immediately, and this table tracks the
+      -- run's state from there: the RC session URL, the completion sentinel path
+      -- polled by get_claude_task_status / the reaper, and (once the task writes
+      -- its sentinel) the repo it created and a one-line result summary.
+      CREATE TABLE IF NOT EXISTS claude_tasks (
+        id             INTEGER PRIMARY KEY AUTOINCREMENT,
+        vm_id          INTEGER NOT NULL REFERENCES vms(id),
+        prompt         TEXT NOT NULL,
+        tmux_session   TEXT NOT NULL,
+        sentinel_path  TEXT NOT NULL,
+        session_url    TEXT,
+        status         TEXT NOT NULL DEFAULT 'running',
+          -- running | completed | failed | timed_out
+        repo_url       TEXT,
+        result_summary TEXT,
+        started_at     DATETIME DEFAULT CURRENT_TIMESTAMP,
+        expires_at     DATETIME,
+        completed_at   DATETIME
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_claude_tasks_vm_id  ON claude_tasks(vm_id);
+      CREATE INDEX IF NOT EXISTS idx_claude_tasks_status ON claude_tasks(status);
+    `,
+  },
 ];
