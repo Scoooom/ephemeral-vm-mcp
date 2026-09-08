@@ -18,7 +18,9 @@ only (`https://pve2.scooom.com:8006`, token auth). Provisions containers on the
 | `src/net/ipalloc.ts` | transactional lowest-free-CID allocation |
 | `src/ssh/exec.ts` | the single `execCommand` SSH primitive |
 | `src/tools/` | the 20 MCP tools |
+| `src/services/` | shared guarded logic (`requireOwnedVm`, lifecycle, status) used by both the tools and the web API |
 | `src/transports/` | stdio + streamable-HTTP (bearer-gated, localhost) |
+| `src/web/` + `public/` | the web dashboard (see below) |
 | `scripts/check-proxmox.ts` | `npm run check:proxmox` — API readiness probe |
 | `scripts/smoke.ts` | `npm run smoke` — full-lifecycle end-to-end test |
 | `deploy/` | systemd unit, cloudflared config, template-fix script |
@@ -27,7 +29,7 @@ only (`https://pve2.scooom.com:8006`, token auth). Provisions containers on the
 
 ```bash
 npm ci && npm run build
-cp .env.example .env      # set MCP_AUTH_TOKEN if using --http
+cp .env.example .env      # --http needs MCP_AUTH_TOKEN; the dashboard needs DASHBOARD_SESSION_SECRET
 npm run check:proxmox     # must be all-green first
 ```
 
@@ -53,6 +55,32 @@ Mutating: `clone_vm`, `start_vm`, `stop_vm`, `reboot_vm`, `destroy_vm`,
 including `destroy_vm` — refuses any VMID that is not an active
 `ephemeral-mcp`-owned row in the local DB, so it can never touch a production
 container.
+
+## Web dashboard
+
+Started alongside the HTTP transport (same process, `127.0.0.1:8789`) when
+`DASHBOARD_ENABLED` is not `0`. Fronted by the same Cloudflare tunnel at
+`proxweb.scooom.com`. Views:
+
+- **Active** / **History** — containers from the local DB (history filterable by
+  name and date range), with a per-container drawer showing live Proxmox status,
+  drift, and the `vm_logs` entries filterable by phase.
+- **Scripts** — create/edit `post_create_scripts` (writes through the same
+  `Repo.upsertScript` path as `set_post_create_script`).
+- Lifecycle buttons (start / stop / reboot / destroy) call the same
+  `src/services/lifecycle.ts` functions the MCP tools use, so the ownership gate
+  still applies.
+
+**Auth: passkeys, trust-on-first-use.** The first visitor registers a WebAuthn
+credential (saved by the browser / password manager); later visits authenticate
+with it against an HMAC-signed session cookie. Because `proxweb.scooom.com` is
+internet-facing, set `DASHBOARD_ENROLL_TOKEN` before exposing it so the first
+registration requires that secret; registration then locks until an
+authenticated session (or the token) adds another passkey.
+
+Config: `DASHBOARD_*` in `.env` (see `.env.example`). `DASHBOARD_RP_ID` /
+`DASHBOARD_ORIGIN` must match the public hostname. The dashboard refuses to
+start without `DASHBOARD_SESSION_SECRET`.
 
 ## Status
 

@@ -59,6 +59,17 @@ export interface VmLogRow {
   created_at: string;
 }
 
+export interface WebCredentialRow {
+  id: number;
+  credential_id: string;
+  public_key: Buffer;
+  counter: number;
+  transports: string | null;
+  label: string | null;
+  created_at: string;
+  last_used_at: string | null;
+}
+
 export interface InsertVmInput {
   vmid: number;
   name: string;
@@ -150,6 +161,33 @@ export class Repo {
     return this.db.prepare(`SELECT * FROM vms ORDER BY id DESC`).all() as VmRow[];
   }
 
+  /**
+   * History rows, newest first, optionally narrowed by a name substring and/or
+   * a `created_at` range (inclusive; `YYYY-MM-DD` or full timestamps).
+   */
+  listHistory(opts: { name?: string; from?: string; to?: string } = {}): VmRow[] {
+    const where: string[] = [];
+    const params: Record<string, string> = {};
+    if (opts.name) {
+      where.push(`name LIKE @name`);
+      params.name = `%${opts.name}%`;
+    }
+    if (opts.from) {
+      where.push(`created_at >= @from`);
+      params.from = opts.from;
+    }
+    if (opts.to) {
+      where.push(`created_at <= @to`);
+      params.to = opts.to;
+    }
+    const sql =
+      `SELECT * FROM vms` +
+      (where.length ? ` WHERE ${where.join(" AND ")}` : ``) +
+      ` ORDER BY id DESC`;
+    const stmt = this.db.prepare(sql);
+    return (where.length ? stmt.all(params) : stmt.all()) as VmRow[];
+  }
+
   setStatus(id: number, status: VmStatus): void {
     this.db.prepare(`UPDATE vms SET status = ? WHERE id = ?`).run(status, id);
   }
@@ -205,10 +243,22 @@ export class Repo {
       .run(vmId, phase, output);
   }
 
-  listLogs(vmId: number, limit = 50): VmLogRow[] {
-    return this.db
-      .prepare(`SELECT * FROM vm_logs WHERE vm_id = ? ORDER BY id DESC LIMIT ?`)
-      .all(vmId, limit) as VmLogRow[];
+  /**
+   * Logs for one container row (`vms.id`), optionally filtered by phase.
+   * Defaults to chronological order so the dashboard log viewer reads top-down.
+   */
+  listLogs(
+    vmId: number,
+    opts: { phase?: LogPhase; limit?: number; order?: "asc" | "desc" } = {},
+  ): VmLogRow[] {
+    const { phase, limit = 200, order = "asc" } = opts;
+    const sql =
+      `SELECT * FROM vm_logs WHERE vm_id = @vmId` +
+      (phase ? ` AND phase = @phase` : ``) +
+      ` ORDER BY id ${order === "desc" ? "DESC" : "ASC"} LIMIT @limit`;
+    const params: Record<string, unknown> = { vmId, limit };
+    if (phase) params.phase = phase;
+    return this.db.prepare(sql).all(params) as VmLogRow[];
   }
 
   // ---- vm_snapshots -------------------------------------------------
@@ -229,5 +279,56 @@ export class Repo {
     return this.db
       .prepare(`SELECT * FROM vm_snapshots WHERE vm_id = ? ORDER BY id`)
       .all(vmId) as VmSnapshotRow[];
+  }
+
+  // ---- web_credentials (dashboard passkey auth) --------------------
+
+  countCredentials(): number {
+    return (
+      this.db.prepare(`SELECT COUNT(*) AS n FROM web_credentials`).get() as { n: number }
+    ).n;
+  }
+
+  listCredentials(): WebCredentialRow[] {
+    return this.db
+      .prepare(`SELECT * FROM web_credentials ORDER BY id`)
+      .all() as WebCredentialRow[];
+  }
+
+  getCredentialByCredId(credentialId: string): WebCredentialRow | undefined {
+    return this.db
+      .prepare(`SELECT * FROM web_credentials WHERE credential_id = ?`)
+      .get(credentialId) as WebCredentialRow | undefined;
+  }
+
+  addCredential(input: {
+    credentialId: string;
+    publicKey: Buffer;
+    counter: number;
+    transports?: string | null;
+    label?: string | null;
+  }): void {
+    this.db
+      .prepare(
+        `INSERT INTO web_credentials (credential_id, public_key, counter, transports, label)
+         VALUES (@credentialId, @publicKey, @counter, @transports, @label)`,
+      )
+      .run({
+        credentialId: input.credentialId,
+        publicKey: input.publicKey,
+        counter: input.counter,
+        transports: input.transports ?? null,
+        label: input.label ?? null,
+      });
+  }
+
+  bumpCredential(credentialId: string, counter: number): void {
+    this.db
+      .prepare(
+        `UPDATE web_credentials
+            SET counter = ?, last_used_at = CURRENT_TIMESTAMP
+          WHERE credential_id = ?`,
+      )
+      .run(counter, credentialId);
   }
 }

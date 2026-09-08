@@ -69,4 +69,20 @@ export const migrations: Migration[] = [
       CREATE INDEX IF NOT EXISTS idx_vm_snapshots_vm_id ON vm_snapshots(vm_id);
     `,
   },
+  {
+    version: 2,
+    name: "web dashboard passkey credentials",
+    sql: /* sql */ `
+      CREATE TABLE IF NOT EXISTS web_credentials (
+        id            INTEGER PRIMARY KEY AUTOINCREMENT,
+        credential_id TEXT UNIQUE NOT NULL,   -- base64url COSE credential id
+        public_key    BLOB NOT NULL,          -- COSE public key bytes
+        counter       INTEGER NOT NULL DEFAULT 0,
+        transports    TEXT,                   -- comma-separated AuthenticatorTransport hints
+        label         TEXT,                   -- user-facing name for the passkey
+        created_at    DATETIME DEFAULT CURRENT_TIMESTAMP,
+        last_used_at  DATETIME
+      );
+    `,
+  },
 ];

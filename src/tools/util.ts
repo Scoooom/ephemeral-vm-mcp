@@ -1,8 +1,12 @@
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import type { AppContext } from "../context.js";
-import type { VmRow } from "../db/repo.js";
-import { OWNER } from "../db/repo.js";
 import { logger } from "../logger.js";
+import { requireOwnedVm, ToolError } from "../services/ownership.js";
+
+// Re-exported so the existing `import { ... } from "./util.js"` call sites in
+// the tool layer keep working; the definitions now live in the service layer
+// where the web API can share them.
+export { requireOwnedVm, ToolError };
 
 export function textResult(text: string): CallToolResult {
   return { content: [{ type: "text", text }] };
@@ -14,14 +18,6 @@ export function jsonResult(value: unknown): CallToolResult {
 
 export function errorResult(message: string): CallToolResult {
   return { content: [{ type: "text", text: message }], isError: true };
-}
-
-/** A tool-visible failure that carries a recovery hint. */
-export class ToolError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = "ToolError";
-  }
 }
 
 /**
@@ -54,23 +50,6 @@ export function sanitizeHostname(name: string): string {
     .slice(0, 63);
   if (!h) throw new ToolError(`Name '${name}' has no usable characters for a hostname`);
   return h;
-}
-
-/**
- * The ownership boundary. Every tool that mutates or inspects a specific
- * container resolves it through here: it must exist in `vms` as an active
- * `ephemeral-mcp` row. This is what stops any tool from being pointed at a
- * production container (CT100 vpn, CT105 dns, the CT113 template, ...).
- */
-export function requireOwnedVm(ctx: AppContext, vmid: number): VmRow {
-  const row = ctx.repo.getActiveByVmid(vmid);
-  if (!row || row.owned_by !== OWNER) {
-    throw new ToolError(
-      `Refusing to act on CT ${vmid}: not an active ${OWNER}-managed container. ` +
-        `Use list_active_vms to see what this server manages.`,
-    );
-  }
-  return row;
 }
 
 /** Truncate long command output for the tool response; full text still goes to vm_logs. */
