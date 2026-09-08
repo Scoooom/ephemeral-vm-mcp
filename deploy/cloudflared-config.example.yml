@@ -1,0 +1,23 @@
+# /etc/cloudflared/config.yml
+#
+# The account on this host is already logged in (~/.cloudflared/cert.pem).
+# mcpprox.scooom.com DNS + Cloudflare Access appear to be pre-provisioned
+# (the hostname returns 401 for unauthenticated requests).
+#
+#   cloudflared tunnel create ephemeral-vm-mcp
+#   cloudflared tunnel route dns ephemeral-vm-mcp mcpprox.scooom.com   # may already exist
+#   # fill in <tunnel-id> below, then:
+#   cloudflared service install
+#   systemctl enable --now cloudflared
+#
+# For an MCP client to reach it through Cloudflare Access, add an Access
+# service token and pass it as CF-Access-Client-Id / CF-Access-Client-Secret
+# headers, in addition to the server's own Authorization: Bearer <MCP_AUTH_TOKEN>.
+
+tunnel: <tunnel-id>
+credentials-file: /root/.cloudflared/<tunnel-id>.json
+
+ingress:
+  - hostname: mcpprox.scooom.com
+    service: http://127.0.0.1:8788
+  - service: http_status:404

@@ -1,0 +1,27 @@
+# /etc/systemd/system/ephemeral-vm-mcp.service
+# Runs the MCP server with the streamable-HTTP transport (localhost only).
+# The Cloudflare tunnel is the sole external ingress.
+#
+#   cp deploy/ephemeral-vm-mcp.service /etc/systemd/system/
+#   systemctl daemon-reload && systemctl enable --now ephemeral-vm-mcp
+
+[Unit]
+Description=Ephemeral VM MCP server
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/ephemeral-vm-mcp
+EnvironmentFile=/opt/ephemeral-vm-mcp/.env
+ExecStart=/usr/bin/node /opt/ephemeral-vm-mcp/dist/index.js --http
+Restart=on-failure
+RestartSec=3
+# hardening
+NoNewPrivileges=yes
+ProtectSystem=strict
+ReadWritePaths=/opt/ephemeral-vm-mcp/data
+PrivateTmp=yes
+
+[Install]
+WantedBy=multi-user.target
