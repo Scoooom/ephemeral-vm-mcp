@@ -1,0 +1,19 @@
+# secrets
+/opt/.proxmox-api-info
+.env
+*.env
+!.env.example
+
+# build + deps
+node_modules/
+dist/
+
+# runtime data
+data/
+*.db
+*.db-shm
+*.db-wal
+
+# misc
+*.log
+.DS_Store
