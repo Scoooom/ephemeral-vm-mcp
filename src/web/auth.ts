@@ -29,7 +29,10 @@ export function authRouter(ctx: AppContext, cfg: DashboardConfig): Router {
   const secret = cfg.sessionSecret!; // guarded in startDashboard
   const r = Router();
 
-  const enrollmentAllowed = (req: Request): "ok" | "closed" | "bad_token" => {
+  // Gate for *starting* a registration (POST /register/options). Completing it
+  // (POST /register/verify) is authorised by the signed challenge cookie that a
+  // successful /register/options issued, so verify does NOT re-check this.
+  const mayStartRegistration = (req: Request): "ok" | "closed" | "bad_token" => {
     if (ctx.repo.countCredentials() === 0) {
       if (!cfg.enrollToken) return "ok";
       const raw = req.get("x-enroll-token") ?? (req.body as { enrollToken?: string })?.enrollToken;
@@ -49,7 +52,7 @@ export function authRouter(ctx: AppContext, cfg: DashboardConfig): Router {
   });
 
   r.post("/register/options", async (req, res) => {
-    const gate = enrollmentAllowed(req);
+    const gate = mayStartRegistration(req);
     if (gate !== "ok") {
       res.status(403).json({ error: gate === "bad_token" ? "bad_enroll_token" : "enrollment_closed" });
       return;
@@ -72,11 +75,9 @@ export function authRouter(ctx: AppContext, cfg: DashboardConfig): Router {
   });
 
   r.post("/register/verify", async (req, res) => {
-    const gate = enrollmentAllowed(req);
-    if (gate !== "ok") {
-      res.status(403).json({ error: gate === "bad_token" ? "bad_enroll_token" : "enrollment_closed" });
-      return;
-    }
+    // No enrollment re-check here: the "reg" challenge cookie is HMAC-signed and
+    // short-lived, and is only ever issued by a /register/options call that
+    // already passed mayStartRegistration().
     const expectedChallenge = takeChallenge(req, res, secret, "reg");
     if (!expectedChallenge) {
       res.status(400).json({ error: "challenge_expired" });
