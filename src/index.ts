@@ -3,6 +3,7 @@ import { createContext } from "./context.js";
 import { createServer } from "./server.js";
 import { startStdio } from "./transports/stdio.js";
 import { startHttp } from "./transports/http.js";
+import { startDashboard } from "./web/dashboard.js";
 import { logger } from "./logger.js";
 
 async function main(): Promise<void> {
@@ -16,6 +17,9 @@ async function main(): Promise<void> {
 
   if (useHttp) {
     await startHttp(ctx);
+    if (ctx.cfg.dashboard.enabled) {
+      await startDashboard(ctx);
+    }
   } else {
     await startStdio(createServer(ctx));
   }
