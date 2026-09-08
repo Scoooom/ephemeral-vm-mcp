@@ -28,10 +28,15 @@ only (`https://pve2.scooom.com:8006`, token auth). Provisions containers on the
 ## Setup
 
 ```bash
-npm ci && npm run build
+npm ci --ignore-scripts && npm run build
 cp .env.example .env      # --http needs MCP_AUTH_TOKEN; the dashboard needs DASHBOARD_SESSION_SECRET
 npm run check:proxmox     # must be all-green first
 ```
+
+`--ignore-scripts` is deliberate: the only native dep (`better-sqlite3` 13.x)
+ships a working `linux-x64` prebuilt binary in its npm tarball, so no compiler
+toolchain is needed on `mcpProx`. Without the flag, npm still tries to
+`node-gyp rebuild` it and fails on the missing `make`.
 
 Local (stdio) MCP client config:
 
