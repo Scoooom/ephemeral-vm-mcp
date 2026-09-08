@@ -5,25 +5,21 @@ import { OWNER } from "../db/repo.js";
 import { allocateIp, buildNet0 } from "../net/ipalloc.js";
 import { execProxmoxTask } from "../proxmox/tasks.js";
 import { execCommand } from "../ssh/exec.js";
-import { handler, jsonResult, requireOwnedVm, sanitizeHostname, textResult, ToolError } from "./util.js";
+import { destroyVm, rebootVm, startVm, stopVm } from "../services/lifecycle.js";
+import { handler, jsonResult, sanitizeHostname, textResult, ToolError } from "./util.js";
 
 export function registerLifecycleTools(server: McpServer, ctx: AppContext): void {
   registerCloneVm(server, ctx);
-  registerPowerTool(server, ctx, "start_vm", "Start a stopped container.", async (vmid) => {
-    const upid = await ctx.pve.lxc.start(vmid);
-    await execProxmoxTask(ctx.pve.client, upid, { timeoutMs: 120_000 });
-    return "running" as const;
-  });
-  registerPowerTool(server, ctx, "stop_vm", "Gracefully shut down a container (falls back to hard stop).", async (vmid) => {
-    const upid = await ctx.pve.lxc.shutdown(vmid);
-    await execProxmoxTask(ctx.pve.client, upid, { timeoutMs: 120_000 });
-    return "stopped" as const;
-  }, true);
-  registerPowerTool(server, ctx, "reboot_vm", "Reboot a container (e.g. to pick up a config change).", async (vmid) => {
-    const upid = await ctx.pve.lxc.reboot(vmid);
-    await execProxmoxTask(ctx.pve.client, upid, { timeoutMs: 180_000 });
-    return "running" as const;
-  });
+  registerPowerTool(server, ctx, "start_vm", "Start a stopped container.", startVm);
+  registerPowerTool(
+    server,
+    ctx,
+    "stop_vm",
+    "Gracefully shut down a container (falls back to hard stop).",
+    stopVm,
+    true,
+  );
+  registerPowerTool(server, ctx, "reboot_vm", "Reboot a container (e.g. to pick up a config change).", rebootVm);
   registerDestroyVm(server, ctx);
 }
 
@@ -166,14 +162,12 @@ function registerCloneVm(server: McpServer, ctx: AppContext): void {
   );
 }
 
-type PowerResultStatus = "running" | "stopped";
-
 function registerPowerTool(
   server: McpServer,
   ctx: AppContext,
   name: "start_vm" | "stop_vm" | "reboot_vm",
   description: string,
-  action: (vmid: number) => Promise<PowerResultStatus>,
+  action: (ctx: AppContext, vmid: number) => Promise<"running" | "stopped">,
   destructive = false,
 ): void {
   server.registerTool(
@@ -187,9 +181,7 @@ function registerPowerTool(
     handler<{ vmid: number }>(
       name,
       async ({ vmid }) => {
-        const row = requireOwnedVm(ctx, vmid);
-        const status = await action(vmid);
-        ctx.repo.setStatus(row.id, status);
+        const status = await action(ctx, vmid);
         return textResult(`CT ${vmid} is now ${status}.`);
       },
       ctx,
@@ -211,20 +203,8 @@ function registerDestroyVm(server: McpServer, ctx: AppContext): void {
     handler<{ vmid: number }>(
       "destroy_vm",
       async ({ vmid }) => {
-        const row = requireOwnedVm(ctx, vmid);
-        ctx.repo.setStatus(row.id, "tearing_down");
-
-        const live = await ctx.pve.lxc.getStatus(vmid).catch(() => null);
-        if (live?.status === "running") {
-          const stopUpid = await ctx.pve.lxc.stop(vmid);
-          await execProxmoxTask(ctx.pve.client, stopUpid, { timeoutMs: 120_000 });
-        }
-
-        const destroyUpid = await ctx.pve.lxc.destroy(vmid);
-        await execProxmoxTask(ctx.pve.client, destroyUpid, { timeoutMs: 300_000 });
-
-        ctx.repo.markDestroyed(row.id);
-        return textResult(`CT ${vmid} destroyed. IP ${row.ip ?? "?"} is now free for reuse.`);
+        const { ip } = await destroyVm(ctx, vmid);
+        return textResult(`CT ${vmid} destroyed. IP ${ip ?? "?"} is now free for reuse.`);
       },
       ctx,
     ),

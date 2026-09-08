@@ -2,6 +2,7 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import type { AppContext } from "../context.js";
 import { ipFromNetConfig } from "../proxmox/lxc.js";
+import { vmStatusWithDrift } from "../services/status.js";
 import { handler, jsonResult, requireOwnedVm } from "./util.js";
 
 export function registerInventoryTools(server: McpServer, ctx: AppContext): void {
@@ -37,20 +38,7 @@ export function registerInventoryTools(server: McpServer, ctx: AppContext): void
     },
     handler<{ vmid: number }>(
       "get_vm_status",
-      async ({ vmid }) => {
-        const row = requireOwnedVm(ctx, vmid);
-        const live = await ctx.pve.lxc.getStatus(vmid).catch((e) => ({ error: String(e) }));
-        const drift: string[] = [];
-        if ("status" in live) {
-          if (live.status === "running" && !["running", "task_running"].includes(row.status)) {
-            drift.push(`Proxmox says running, DB says ${row.status}`);
-          }
-          if (live.status === "stopped" && ["running", "task_running"].includes(row.status)) {
-            drift.push(`Proxmox says stopped, DB says ${row.status}`);
-          }
-        }
-        return jsonResult({ db: row, proxmox: live, drift });
-      },
+      async ({ vmid }) => jsonResult(await vmStatusWithDrift(ctx, vmid)),
       ctx,
     ),
   );
