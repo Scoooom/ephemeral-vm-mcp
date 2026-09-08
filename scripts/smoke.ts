@@ -96,7 +96,9 @@ async function main(): Promise<void> {
 
     const snap = await call("create_snapshot", { vmid, snapshot_name: "pretask" });
     check("create_snapshot ok", !snap.isError, textOf(snap));
-    await call("exec_command", { vmid, cmd: "echo dirty > /tmp/dirty.marker" });
+    await call("exec_command", { vmid, cmd: "echo dirty > /root/dirty.marker && sync" });
+    const preRb = await call("exec_command", { vmid, cmd: "cat /root/dirty.marker 2>&1 || echo MISSING" });
+    check("dirty marker written pre-rollback", JSON.parse(textOf(preRb)).stdout.trim() === "dirty");
 
     if (!SKIP_CLAUDE) {
       console.log("\nrun_claude_task (may take a minute)...");
@@ -108,8 +110,9 @@ async function main(): Promise<void> {
 
     const rb = await call("rollback_snapshot", { vmid, snapshot_name: "pretask" });
     check("rollback_snapshot ok", !rb.isError, textOf(rb));
-    const dirty = await call("exec_command", { vmid, cmd: "cat /tmp/dirty.marker 2>&1 || echo GONE" });
-    check("rollback removed post-snapshot file", JSON.parse(textOf(dirty)).stdout.trim() === "GONE");
+    const dirty = await call("exec_command", { vmid, cmd: "test -e /root/dirty.marker && echo PRESENT || echo GONE" });
+    const dOut = JSON.parse(textOf(dirty)).stdout.trim();
+    check("rollback removed post-snapshot file", dOut === "GONE", dOut);
 
     const guard = await call("destroy_vm", { vmid: 100 });
     check("destroy_vm(100) refused (ownership gate)", guard.isError === true, textOf(guard).slice(0, 120));

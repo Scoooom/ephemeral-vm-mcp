@@ -138,7 +138,7 @@ export function registerExecTools(server: McpServer, ctx: AppContext): void {
         const row = requireOwnedVm(ctx, vmid);
         const host = await resolveHost(ctx, row, vmid);
         const turns = max_turns ?? ctx.cfg.claudeDefaultMaxTurns;
-        const cmd = `claude -p ${shellQuote(prompt)} --permission-mode bypassPermissions --max-turns ${turns} --output-format json`;
+        const cmd = `claude -p ${shellQuote(prompt)} --permission-mode bypassPermissions --max-turns ${turns} --output-format json < /dev/null`;
 
         ctx.repo.setStatus(row.id, "task_running");
         try {
@@ -148,6 +148,9 @@ export function registerExecTools(server: McpServer, ctx: AppContext): void {
             timeoutMs: 900_000,
             user: ssh.user,
             privateKey: ssh.privateKey,
+            // Claude Code refuses bypassPermissions as root without this; the
+            // ephemeral container IS a throwaway sandbox.
+            env: { IS_SANDBOX: "1" },
           });
           ctx.repo.addLog(
             row.id,
