@@ -2,8 +2,15 @@ const { startRegistration, startAuthentication, browserSupportsWebAuthn } = wind
 const content = document.getElementById("content");
 const errBox = document.getElementById("err");
 
+const ERR_TEXT = {
+  bad_enroll_token: "Enrollment token is incorrect.",
+  enrollment_closed: "Enrollment is closed — a passkey is already registered.",
+  challenge_expired: "That took too long — try again.",
+  verification_failed: "The passkey could not be verified.",
+  unknown_credential: "This passkey is not registered here.",
+};
 function showErr(msg) {
-  errBox.textContent = msg || "";
+  errBox.textContent = msg ? (ERR_TEXT[msg] || msg) : "";
 }
 
 async function postJSON(url, body) {
@@ -20,7 +27,9 @@ async function postJSON(url, body) {
 async function doRegister(enrollToken) {
   showErr("");
   try {
-    const optionsJSON = await postJSON("/api/auth/register/options", { enrollToken });
+    const optionsJSON = await postJSON("/api/auth/register/options", {
+      enrollToken: (enrollToken || "").trim() || undefined,
+    });
     const attResp = await startRegistration({ optionsJSON });
     const label = `${navigator.platform || "passkey"} — ${new Date().toISOString().slice(0, 10)}`;
     await postJSON("/api/auth/register/verify", { attResp, label });
@@ -46,10 +55,15 @@ function renderRegister(state) {
   content.innerHTML = `
     <p>No passkey is registered yet. Create one now — your browser or password
        manager will offer to save it. This becomes the key to the dashboard.</p>
-    ${state.enrollTokenRequired ? `<input id="enroll" type="password" placeholder="Enrollment token" autocomplete="off" />` : ""}
+    ${state.enrollTokenRequired
+      ? `<input id="enroll" type="text" inputmode="latin" placeholder="Enrollment token"
+           autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false"
+           data-1p-ignore data-lpignore="true" data-bwignore />`
+      : ""}
     <button class="btn primary" id="go">Register a passkey</button>`;
-  document.getElementById("go").onclick = () =>
-    doRegister(document.getElementById("enroll")?.value || undefined);
+  const go = () => doRegister(document.getElementById("enroll")?.value);
+  document.getElementById("go").onclick = go;
+  document.getElementById("enroll")?.addEventListener("keydown", (e) => e.key === "Enter" && go());
 }
 
 function renderLogin() {
