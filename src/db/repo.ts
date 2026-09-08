@@ -59,6 +59,22 @@ export interface VmLogRow {
   created_at: string;
 }
 
+export type DeploymentStatus = "deploying" | "running" | "failed";
+
+export interface DeploymentRow {
+  id: number;
+  vm_id: number;
+  repo_url: string;
+  branch: string | null;
+  start_command: string | null;
+  service_name: string | null;
+  status: DeploymentStatus;
+  deployed_at: string;
+  tunnel_hostname: string | null;
+  last_tunnel_check_status: string | null;
+  last_tunnel_check_at: string | null;
+}
+
 export interface WebCredentialRow {
   id: number;
   credential_id: string;
@@ -279,6 +295,54 @@ export class Repo {
     return this.db
       .prepare(`SELECT * FROM vm_snapshots WHERE vm_id = ? ORDER BY id`)
       .all(vmId) as VmSnapshotRow[];
+  }
+
+  // ---- deployments -------------------------------------------------
+
+  insertDeployment(input: {
+    vmId: number;
+    repoUrl: string;
+    branch: string | null;
+    startCommand: string | null;
+  }): DeploymentRow {
+    const info = this.db
+      .prepare(
+        `INSERT INTO deployments (vm_id, repo_url, branch, start_command)
+         VALUES (@vmId, @repoUrl, @branch, @startCommand)`,
+      )
+      .run(input as unknown as Record<string, unknown>);
+    return this.db
+      .prepare(`SELECT * FROM deployments WHERE id = ?`)
+      .get(Number(info.lastInsertRowid)) as DeploymentRow;
+  }
+
+  finishDeployment(id: number, status: "running" | "failed", serviceName: string | null): void {
+    this.db
+      .prepare(`UPDATE deployments SET status = ?, service_name = ? WHERE id = ?`)
+      .run(status, serviceName, id);
+  }
+
+  latestDeployment(vmId: number): DeploymentRow | undefined {
+    return this.db
+      .prepare(`SELECT * FROM deployments WHERE vm_id = ? ORDER BY id DESC LIMIT 1`)
+      .get(vmId) as DeploymentRow | undefined;
+  }
+
+  /**
+   * Record the outcome of a tunnel health check on a deployment. `hostname` is
+   * only overwritten when a non-null value is supplied (a check by explicit
+   * hostname shouldn't wipe a discovered one, and vice versa).
+   */
+  recordTunnelCheck(id: number, hostname: string | null, status: string): void {
+    this.db
+      .prepare(
+        `UPDATE deployments
+            SET tunnel_hostname = COALESCE(?, tunnel_hostname),
+                last_tunnel_check_status = ?,
+                last_tunnel_check_at = CURRENT_TIMESTAMP
+          WHERE id = ?`,
+      )
+      .run(hostname, status, id);
   }
 
   // ---- web_credentials (dashboard passkey auth) --------------------

@@ -4,6 +4,7 @@ import type { LogPhase, VmRow } from "../db/repo.js";
 import { logger } from "../logger.js";
 import { destroyVm, rebootVm, startVm, stopVm } from "../services/lifecycle.js";
 import { vmStatusWithDrift } from "../services/status.js";
+import { checkTunnelStatus } from "../services/tunnel.js";
 import { ToolError } from "../services/ownership.js";
 
 const LOG_PHASES: LogPhase[] = ["post_create", "claude_task", "deploy", "teardown", "exec", "clone"];
@@ -83,6 +84,12 @@ export function apiRouter(ctx: AppContext): Router {
       });
     });
   }
+
+  r.post("/vms/:vmid/check-tunnel", async (req, res) => {
+    const vmid = parseVmid(req.params.vmid);
+    logger.info(`dashboard check-tunnel CT ${vmid}`);
+    await handle(res, async () => ({ action: "check-tunnel", ...(await checkTunnelStatus(ctx, vmid, { retries: 2 })) }));
+  });
 
   return r;
 }

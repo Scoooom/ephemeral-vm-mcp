@@ -85,4 +85,25 @@ export const migrations: Migration[] = [
       );
     `,
   },
+  {
+    version: 3,
+    name: "app deployments",
+    sql: /* sql */ `
+      CREATE TABLE IF NOT EXISTS deployments (
+        id                       INTEGER PRIMARY KEY AUTOINCREMENT,
+        vm_id                    INTEGER NOT NULL REFERENCES vms(id),
+        repo_url                 TEXT NOT NULL,
+        branch                   TEXT,
+        start_command            TEXT,
+        service_name             TEXT,          -- systemd unit created on the container
+        status                   TEXT NOT NULL DEFAULT 'deploying',  -- deploying | running | failed
+        deployed_at              DATETIME DEFAULT CURRENT_TIMESTAMP,
+        tunnel_hostname          TEXT,
+        last_tunnel_check_status TEXT,          -- e.g. 'healthy:200' | 'unhealthy:502' | 'unhealthy:noresponse'
+        last_tunnel_check_at     DATETIME
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_deployments_vm_id ON deployments(vm_id);
+    `,
+  },
 ];

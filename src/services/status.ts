@@ -1,5 +1,5 @@
 import type { AppContext } from "../context.js";
-import type { VmRow } from "../db/repo.js";
+import type { DeploymentRow, VmRow } from "../db/repo.js";
 import type { PveLxcStatus } from "../proxmox/types.js";
 import { requireOwnedVm } from "./ownership.js";
 
@@ -7,6 +7,7 @@ export interface VmStatusReport {
   db: VmRow;
   proxmox: PveLxcStatus | { error: string };
   drift: string[];
+  deployment: DeploymentRow | null;
 }
 
 /**
@@ -28,5 +29,5 @@ export async function vmStatusWithDrift(ctx: AppContext, vmid: number): Promise<
     }
   }
 
-  return { db: row, proxmox: live, drift };
+  return { db: row, proxmox: live, drift, deployment: ctx.repo.latestDeployment(row.id) ?? null };
 }
