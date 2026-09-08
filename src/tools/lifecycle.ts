@@ -77,7 +77,8 @@ function registerCloneVm(server: McpServer, ctx: AppContext): void {
           );
         }
 
-        // 2. next free VMID
+        // 2. next free VMID (and make sure the target pool exists)
+        await ctx.pve.discovery.ensurePool(ctx.cfg.proxmox.pool);
         let newid = await ctx.pve.discovery.nextId();
         const liveVmids = new Set((await ctx.pve.lxc.list()).map((c) => c.vmid));
         while (liveVmids.has(newid) || ctx.repo.vmidInUse(newid)) newid++;
@@ -109,7 +110,7 @@ function registerCloneVm(server: McpServer, ctx: AppContext): void {
             newid,
             hostname,
             full: cloneType === "full",
-            pool: "ephemeral",
+            pool: ctx.cfg.proxmox.pool || undefined,
             storage: cloneType === "full" ? ctx.cfg.proxmox.storage : undefined,
             description,
           });

@@ -33,4 +33,12 @@ export class Discovery {
     const raw = await this.client.get<string>("/cluster/nextid");
     return Number(raw);
   }
+
+  /** Create the resource pool if it does not already exist (idempotent). */
+  async ensurePool(poolid: string): Promise<void> {
+    if (!poolid) return;
+    const pools = await this.client.get<{ poolid: string }[]>("/pools");
+    if (pools.some((p) => p.poolid === poolid)) return;
+    await this.client.post("/pools", { poolid, comment: "Ephemeral MCP-managed containers" });
+  }
 }

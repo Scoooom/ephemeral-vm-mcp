@@ -21,6 +21,8 @@ export interface ProxmoxConfig {
   /** the ONLY storage ephemeral rootfs is allocated on — never local-zfs */
   storage: string;
   templateId: number;
+  /** resource pool every ephemeral container is placed in ('' disables pool assignment) */
+  pool: string;
 }
 
 export interface NetworkConfig {
@@ -103,6 +105,7 @@ export function loadConfig(): AppConfig {
       node: process.env.PROXMOX_NODE ?? "pve2",
       storage: process.env.PROXMOX_STORAGE ?? "media",
       templateId: num("PROXMOX_TEMPLATE_ID", process.env.PROXMOX_TEMPLATE_ID, 113),
+      pool: process.env.EPHEMERAL_POOL ?? "ephemeral",
     },
     network: {
       bridge: process.env.EPHEMERAL_BRIDGE ?? "vmbr2",
