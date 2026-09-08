@@ -54,15 +54,26 @@ including `destroy_vm` — refuses any VMID that is not an active
 `ephemeral-mcp`-owned row in the local DB, so it can never touch a production
 container.
 
-## Known blocker
+## Status
 
-Cloned containers currently have **no `sshd` listening**, so the SSH-dependent
-tools (`exec_command`, `run_post_create_script`, `run_claude_task`) and the
-`clone_vm` SSH-readiness probe cannot complete. The `CT113` template needs
-`sshd` enabled on boot, host-key regen on first boot, and the `mcpProx` public
-key in `root`'s `authorized_keys`. Run `deploy/fix-template-ssh.sh` inside the
-template (instructions in the script header), then re-template.
+Verified end-to-end against `pve2` (18/18 `npm run smoke` checks): clone,
+configure (static IP / resources / tags), start, `exec_command`,
+`run_post_create_script` (+ one-shot guard), `create_snapshot`,
+`run_claude_task` (real `claude -p`), `rollback_snapshot`, `stop`, `destroy_vm`,
+the ownership gate (`destroy_vm` on a production CT is refused), UPID task
+polling, IP allocation, pool auto-creation.
 
-Verified working without SSH: clone, configure (static IP / resources / tags),
-start, stop, destroy (+ ownership gate), snapshots, all discovery tools, UPID
-task polling, IP allocation, pool auto-creation.
+### CT113 template fixes applied during bring-up
+
+The template needed two fixes for cloned containers to be SSH-reachable (done
+2026-09-08; a `media/basevol-113-disk-0@safety-pre-sshfix` ZFS snapshot was
+taken first):
+
+1. `firstboot-regen.service` is now ordered `Before=ssh.service ssh.socket`
+   (was `Before=ssh.service` only, so `ssh.socket` could bind :22 and trigger a
+   keyless `sshd` that hit the restart limit and gave up).
+2. Its script no longer calls `systemctl restart ssh.*` (that deadlocked against
+   its own `Before=` ordering). Ordering alone is sufficient.
+
+`run_claude_task` runs `claude -p` as root with `IS_SANDBOX=1` (Claude Code
+refuses `bypassPermissions` as root without it).
