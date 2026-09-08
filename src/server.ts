@@ -14,6 +14,11 @@ Provisions ephemeral LXC containers on Proxmox (pve2), one per task.
 - create_snapshot before run_claude_task so a bad run can be rolled back.
 - destroy_vm and every per-container tool only act on containers this server
   created; they refuse any other VMID.
+- create_github_repo makes a new (private by default) GitHub repo via this
+  host's authenticated gh CLI. deploy_app clones/pulls a repo onto a container
+  and runs it under a systemd unit. check_tunnel_status health-checks a
+  deployed container's Cloudflare tunnel — poll it (retries=N) until healthy
+  before declaring a deploy done.
 `.trim();
 
 export function createServer(ctx: AppContext): McpServer {

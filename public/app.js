@@ -158,8 +158,15 @@ async function openDrawer(vmid) {
 function detailHtml(report) {
   const db = report.db || {};
   const px = report.proxmox || {};
+  const dep = report.deployment || null;
   const drift = (report.drift || []).map((d) => `<div class="drift">⚠ ${esc(d)}</div>`).join("");
   const pxStatus = px.error ? `error: ${esc(px.error)}` : esc(px.status || "?");
+  const depRows = dep ? `
+      <div>Repo</div><div class="mono">${esc(dep.repo_url)}${dep.branch ? ` @ ${esc(dep.branch)}` : ""}</div>
+      <div>Deploy</div><div>${badge(dep.status || "?")}${dep.service_name ? ` · <span class="mono">${esc(dep.service_name)}</span>` : ""}</div>
+      <div>Deployed</div><div class="mono">${esc(dep.deployed_at || "—")}</div>
+      <div>Tunnel</div><div class="mono">${esc(dep.tunnel_hostname || "—")}</div>
+      <div>Tunnel check</div><div>${dep.last_tunnel_check_status ? esc(dep.last_tunnel_check_status) : "—"}${dep.last_tunnel_check_at ? ` <span class="mono muted">· ${esc(dep.last_tunnel_check_at)}</span>` : ""}</div>` : "";
   return `
     ${drift}
     <div class="kv">
@@ -174,11 +181,13 @@ function detailHtml(report) {
       <div>Created</div><div class="mono">${esc(db.created_at || "")}</div>
       ${db.destroyed_at ? `<div>Destroyed</div><div class="mono">${esc(db.destroyed_at)}</div>` : ""}
       <div>post_create</div><div>${db.post_create_ran ? esc(db.post_create_ran) : "not run"}</div>
+      ${depRows}
     </div>
     ${db.status !== "destroyed" ? `<div class="actions">
       <button class="btn" data-act="start">Start</button>
       <button class="btn" data-act="stop">Stop</button>
       <button class="btn" data-act="reboot">Reboot</button>
+      ${dep ? `<button class="btn" data-act="check-tunnel">Check tunnel</button>` : ""}
       <button class="btn danger" data-act="destroy">Destroy</button>
     </div>` : ""}
     <div id="logs"></div>`;
@@ -193,7 +202,11 @@ function wireActions(vmid) {
       toast(`${act}…`);
       try {
         const r = await api(`/vms/${vmid}/${act}`, { method: "POST" });
-        toast(`CT ${vmid}: ${r.status || r.action} ok`);
+        if (act === "check-tunnel") {
+          toast(`CT ${vmid}: tunnel ${r.healthy ? "healthy" : "unhealthy"} (${r.hostname || "no host"}${r.http_status ? ` · ${r.http_status}` : ""})`);
+        } else {
+          toast(`CT ${vmid}: ${r.status || r.action} ok`);
+        }
         await openDrawer(vmid);
         refreshCurrentTab();
       } catch (e) {

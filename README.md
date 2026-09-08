@@ -17,7 +17,7 @@ only (`https://pve2.scooom.com:8006`, token auth). Provisions containers on the
 | `src/proxmox/` | token-auth axios client, UPID task polling, `LxcApi`, `Discovery` |
 | `src/net/ipalloc.ts` | transactional lowest-free-CID allocation |
 | `src/ssh/exec.ts` | the single `execCommand` SSH primitive |
-| `src/tools/` | the 20 MCP tools |
+| `src/tools/` | the 23 MCP tools |
 | `src/services/` | shared guarded logic (`requireOwnedVm`, lifecycle, status) used by both the tools and the web API |
 | `src/transports/` | stdio + streamable-HTTP (bearer-gated, localhost) |
 | `src/web/` + `public/` | the web dashboard (see below) |
@@ -56,10 +56,32 @@ Mutating: `clone_vm`, `start_vm`, `stop_vm`, `reboot_vm`, `destroy_vm`,
 `exec_command`, `set_post_create_script`, `run_post_create_script`,
 `run_claude_task`, `create_snapshot`, `rollback_snapshot`.
 
+Deploy: `create_github_repo`, `deploy_app`, `check_tunnel_status`.
+
 `clone_vm` allocates the VMID and static IP itself. Every per-container tool —
 including `destroy_vm` — refuses any VMID that is not an active
 `ephemeral-mcp`-owned row in the local DB, so it can never touch a production
 container.
+
+### Deploying an app
+
+`create_github_repo(name, private?, description?)` creates a repo (private by
+default) using this host's already-authenticated `gh` CLI and returns its URLs.
+
+`deploy_app(vmid, repo_url, branch?, start_command)` clones/pulls the repo into
+`/opt/apps/<name>` on an owned, running container (github.com URLs use the
+container's pre-authorized `gh repo clone`), installs dependencies
+(`npm ci`/`npm install`/`pip` — auto-detected), and runs `start_command` under a
+`app-<name>` systemd unit. Each step lands in `vm_logs` under phase `deploy`, and
+the deployment is tracked in the `deployments` table.
+
+`check_tunnel_status(vmid, hostname?, path?, retries?, interval_seconds?)` is a
+real health check: it resolves the tunnel hostname (argument → recorded
+deployment → the container's `cloudflared` config), confirms `cloudflared` is
+running, and probes the public hostname over HTTPS (a 5xx is unhealthy). Pass
+`retries` to poll until healthy. `run_claude_task`-style workflows should poll
+this before declaring a deploy complete. Per-container tunnels are set up on the
+container itself (its `cloudflared` is preconfigured) — this tool only verifies.
 
 ## Web dashboard
 
@@ -89,12 +111,14 @@ start without `DASHBOARD_SESSION_SECRET`.
 
 ## Status
 
-Verified end-to-end against `pve2` (18/18 `npm run smoke` checks): clone,
+Verified end-to-end against `pve2` via `npm run smoke`: clone,
 configure (static IP / resources / tags), start, `exec_command`,
 `run_post_create_script` (+ one-shot guard), `create_snapshot`,
 `run_claude_task` (real `claude -p`), `rollback_snapshot`, `stop`, `destroy_vm`,
 the ownership gate (`destroy_vm` on a production CT is refused), UPID task
-polling, IP allocation, pool auto-creation.
+polling, IP allocation, pool auto-creation, and the full deploy loop
+(`create_github_repo` → `deploy_app` → `check_tunnel_status` against a
+throwaway repo + quick tunnel). `SKIP_DEPLOY=1` skips that last block.
 
 ### CT113 template fixes applied during bring-up
 

@@ -1,18 +1,11 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import type { AppContext } from "../context.js";
-import type { VmRow } from "../db/repo.js";
 import { execCommand, shellQuote, type ExecResult } from "../ssh/exec.js";
+import { resolveContainerHost } from "../services/remote.js";
 import { clip, handler, jsonResult, requireOwnedVm, textResult, ToolError } from "./util.js";
 
-/** Resolve the container's IP: DB first, Proxmox netns as fallback. */
-async function resolveHost(ctx: AppContext, row: VmRow, vmid: number): Promise<string> {
-  if (row.ip) return row.ip;
-  const ifaces = await ctx.pve.lxc.getInterfaces(vmid).catch(() => []);
-  const ip = ifaces.find((i) => i.name === "eth0" && i.inet)?.inet?.split("/")[0];
-  if (!ip) throw new ToolError(`No IP known for CT ${vmid} (DB has none, Proxmox reports none).`);
-  return ip;
-}
+const resolveHost = resolveContainerHost;
 
 function summarize(r: ExecResult): { code: number | null; timedOut: boolean; stdout: string; stderr: string } {
   return { code: r.code, timedOut: r.timedOut, stdout: clip(r.stdout), stderr: clip(r.stderr) };
