@@ -47,11 +47,27 @@ export interface HttpConfig {
   authToken: string | null;
 }
 
+export interface DashboardConfig {
+  /** Whether to start the dashboard listener (only relevant in --http mode). */
+  enabled: boolean;
+  port: number;
+  host: string;
+  /** WebAuthn Relying Party ID — the registrable domain the dashboard is served from. */
+  rpId: string;
+  /** WebAuthn expected origin, e.g. https://proxweb.scooom.com. */
+  origin: string;
+  /** HMAC key for signing session/challenge cookies. Required when enabled. */
+  sessionSecret: string | null;
+  /** If set, registering a new passkey requires this token (mitigates trust-on-first-use). */
+  enrollToken: string | null;
+}
+
 export interface AppConfig {
   proxmox: ProxmoxConfig;
   network: NetworkConfig;
   ssh: SshConfig;
   http: HttpConfig;
+  dashboard: DashboardConfig;
   dbPath: string;
   claudeDefaultMaxTurns: number;
 }
@@ -96,6 +112,8 @@ export function loadConfig(): AppConfig {
   const dbPathRaw = process.env.MCP_DB_PATH ?? "./data/ephemeral.db";
   const dbPath = isAbsolute(dbPathRaw) ? dbPathRaw : resolve(process.cwd(), dbPathRaw);
 
+  const dashRpId = process.env.DASHBOARD_RP_ID ?? "proxweb.scooom.com";
+
   return {
     proxmox: {
       apiBase: `https://${host}:8006/api2/json`,
@@ -125,6 +143,15 @@ export function loadConfig(): AppConfig {
       port: num("MCP_HTTP_PORT", process.env.MCP_HTTP_PORT, 8788),
       host: process.env.MCP_HTTP_HOST ?? "127.0.0.1",
       authToken: process.env.MCP_AUTH_TOKEN?.trim() || null,
+    },
+    dashboard: {
+      enabled: (process.env.DASHBOARD_ENABLED ?? "1").trim() !== "0",
+      port: num("DASHBOARD_PORT", process.env.DASHBOARD_PORT, 8789),
+      host: process.env.DASHBOARD_HOST ?? "127.0.0.1",
+      rpId: dashRpId,
+      origin: process.env.DASHBOARD_ORIGIN ?? `https://${dashRpId}`,
+      sessionSecret: process.env.DASHBOARD_SESSION_SECRET?.trim() || null,
+      enrollToken: process.env.DASHBOARD_ENROLL_TOKEN?.trim() || null,
     },
     dbPath,
     claudeDefaultMaxTurns: num("CLAUDE_DEFAULT_MAX_TURNS", process.env.CLAUDE_DEFAULT_MAX_TURNS, 12),
