@@ -35,6 +35,8 @@ export interface VmRow {
   created_at: string;
   destroyed_at: string | null;
   owned_by: string | null;
+  /** RC session URL of the container's most recent run_claude_task launch. */
+  session_url: string | null;
 }
 
 export interface PostCreateScriptRow {
@@ -73,6 +75,28 @@ export interface DeploymentRow {
   tunnel_hostname: string | null;
   last_tunnel_check_status: string | null;
   last_tunnel_check_at: string | null;
+}
+
+export type ClaudeTaskStatus = "running" | "completed" | "failed" | "timed_out";
+
+export interface ClaudeTaskRow {
+  id: number;
+  vm_id: number;
+  prompt: string;
+  tmux_session: string;
+  sentinel_path: string;
+  session_url: string | null;
+  status: ClaudeTaskStatus;
+  repo_url: string | null;
+  result_summary: string | null;
+  started_at: string;
+  expires_at: string | null;
+  completed_at: string | null;
+}
+
+/** A running claude task joined to its container's live VMID. */
+export interface RunningClaudeTaskRow extends ClaudeTaskRow {
+  vmid: number;
 }
 
 export interface WebCredentialRow {
@@ -343,6 +367,69 @@ export class Repo {
           WHERE id = ?`,
       )
       .run(hostname, status, id);
+  }
+
+  // ---- claude_tasks (run_claude_task / Remote Control) ------------
+
+  insertClaudeTask(input: {
+    vmId: number;
+    prompt: string;
+    tmuxSession: string;
+    sentinelPath: string;
+    expiresAt: string;
+  }): ClaudeTaskRow {
+    const info = this.db
+      .prepare(
+        `INSERT INTO claude_tasks (vm_id, prompt, tmux_session, sentinel_path, expires_at)
+         VALUES (@vmId, @prompt, @tmuxSession, @sentinelPath, @expiresAt)`,
+      )
+      .run(input as unknown as Record<string, unknown>);
+    return this.db
+      .prepare(`SELECT * FROM claude_tasks WHERE id = ?`)
+      .get(Number(info.lastInsertRowid)) as ClaudeTaskRow;
+  }
+
+  /** Record the RC session URL both on the task row and as the container's current one. */
+  setClaudeTaskSessionUrl(id: number, vmId: number, sessionUrl: string): void {
+    this.db.prepare(`UPDATE claude_tasks SET session_url = ? WHERE id = ?`).run(sessionUrl, id);
+    this.db.prepare(`UPDATE vms SET session_url = ? WHERE id = ?`).run(sessionUrl, vmId);
+  }
+
+  finishClaudeTask(
+    id: number,
+    status: Exclude<ClaudeTaskStatus, "running">,
+    fields: { repoUrl?: string | null; summary?: string | null } = {},
+  ): void {
+    this.db
+      .prepare(
+        `UPDATE claude_tasks
+            SET status = ?,
+                repo_url = COALESCE(?, repo_url),
+                result_summary = COALESCE(?, result_summary),
+                completed_at = CURRENT_TIMESTAMP
+          WHERE id = ?`,
+      )
+      .run(status, fields.repoUrl ?? null, fields.summary ?? null, id);
+  }
+
+  latestClaudeTask(vmId: number): ClaudeTaskRow | undefined {
+    return this.db
+      .prepare(`SELECT * FROM claude_tasks WHERE vm_id = ? ORDER BY id DESC LIMIT 1`)
+      .get(vmId) as ClaudeTaskRow | undefined;
+  }
+
+  /** Every still-running task with its container's active VMID (for the reaper). */
+  listRunningClaudeTasks(): RunningClaudeTaskRow[] {
+    return this.db
+      .prepare(
+        `SELECT t.*, v.vmid AS vmid
+           FROM claude_tasks t
+           JOIN vms v ON v.id = t.vm_id
+          WHERE t.status = 'running'
+            AND v.status != 'destroyed'
+          ORDER BY t.id`,
+      )
+      .all() as RunningClaudeTaskRow[];
   }
 
   // ---- web_credentials (dashboard passkey auth) --------------------

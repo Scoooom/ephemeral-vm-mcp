@@ -159,8 +159,18 @@ function detailHtml(report) {
   const db = report.db || {};
   const px = report.proxmox || {};
   const dep = report.deployment || null;
+  const task = report.claude_task || null;
   const drift = (report.drift || []).map((d) => `<div class="drift">⚠ ${esc(d)}</div>`).join("");
   const pxStatus = px.error ? `error: ${esc(px.error)}` : esc(px.status || "?");
+  const sessionUrl = (task && task.session_url) || db.session_url || null;
+  const sessionRow = sessionUrl
+    ? `<div>Claude session</div><div><a href="${esc(sessionUrl)}" target="_blank" rel="noopener">open live session ↗</a></div>`
+    : "";
+  const taskRows = task ? `
+      <div>Claude task</div><div>${badge(task.status || "?")}${task.result_summary ? ` · ${esc(task.result_summary)}` : ""}</div>
+      ${task.repo_url ? `<div>Task repo</div><div class="mono"><a href="${esc(task.repo_url)}" target="_blank" rel="noopener">${esc(task.repo_url)}</a></div>` : ""}
+      <div>Task started</div><div class="mono">${esc(task.started_at || "—")}${task.completed_at ? ` → ${esc(task.completed_at)}` : task.expires_at ? ` <span class="muted">(times out ${esc(task.expires_at)})</span>` : ""}</div>
+      <div>tmux</div><div class="mono">${esc(task.tmux_session || "—")}</div>` : "";
   const depRows = dep ? `
       <div>Repo</div><div class="mono">${esc(dep.repo_url)}${dep.branch ? ` @ ${esc(dep.branch)}` : ""}</div>
       <div>Deploy</div><div>${badge(dep.status || "?")}${dep.service_name ? ` · <span class="mono">${esc(dep.service_name)}</span>` : ""}</div>
@@ -181,12 +191,15 @@ function detailHtml(report) {
       <div>Created</div><div class="mono">${esc(db.created_at || "")}</div>
       ${db.destroyed_at ? `<div>Destroyed</div><div class="mono">${esc(db.destroyed_at)}</div>` : ""}
       <div>post_create</div><div>${db.post_create_ran ? esc(db.post_create_ran) : "not run"}</div>
+      ${sessionRow}
+      ${taskRows}
       ${depRows}
     </div>
     ${db.status !== "destroyed" ? `<div class="actions">
       <button class="btn" data-act="start">Start</button>
       <button class="btn" data-act="stop">Stop</button>
       <button class="btn" data-act="reboot">Reboot</button>
+      ${task ? `<button class="btn" data-act="check-claude-task">Check task</button>` : ""}
       ${dep ? `<button class="btn" data-act="check-tunnel">Check tunnel</button>` : ""}
       <button class="btn danger" data-act="destroy">Destroy</button>
     </div>` : ""}
@@ -204,6 +217,8 @@ function wireActions(vmid) {
         const r = await api(`/vms/${vmid}/${act}`, { method: "POST" });
         if (act === "check-tunnel") {
           toast(`CT ${vmid}: tunnel ${r.healthy ? "healthy" : "unhealthy"} (${r.hostname || "no host"}${r.http_status ? ` · ${r.http_status}` : ""})`);
+        } else if (act === "check-claude-task") {
+          toast(`CT ${vmid}: task ${r.status}${r.result_summary ? ` — ${r.result_summary}` : ""}`);
         } else {
           toast(`CT ${vmid}: ${r.status || r.action} ok`);
         }

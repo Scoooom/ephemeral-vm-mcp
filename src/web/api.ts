@@ -5,6 +5,7 @@ import { logger } from "../logger.js";
 import { destroyVm, rebootVm, startVm, stopVm } from "../services/lifecycle.js";
 import { vmStatusWithDrift } from "../services/status.js";
 import { checkTunnelStatus } from "../services/tunnel.js";
+import { getClaudeTaskStatus } from "../services/claudeTask.js";
 import { ToolError } from "../services/ownership.js";
 
 const LOG_PHASES: LogPhase[] = ["post_create", "claude_task", "deploy", "teardown", "exec", "clone"];
@@ -89,6 +90,12 @@ export function apiRouter(ctx: AppContext): Router {
     const vmid = parseVmid(req.params.vmid);
     logger.info(`dashboard check-tunnel CT ${vmid}`);
     await handle(res, async () => ({ action: "check-tunnel", ...(await checkTunnelStatus(ctx, vmid, { retries: 2 })) }));
+  });
+
+  r.post("/vms/:vmid/check-claude-task", async (req, res) => {
+    const vmid = parseVmid(req.params.vmid);
+    logger.info(`dashboard check-claude-task CT ${vmid}`);
+    await handle(res, async () => ({ action: "check-claude-task", ...(await getClaudeTaskStatus(ctx, vmid, { tailLines: 0 })) }));
   });
 
   return r;

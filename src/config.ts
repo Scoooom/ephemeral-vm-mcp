@@ -69,7 +69,15 @@ export interface AppConfig {
   http: HttpConfig;
   dashboard: DashboardConfig;
   dbPath: string;
-  claudeDefaultMaxTurns: number;
+  /**
+   * Wall-clock safety valve for run_claude_task. Remote Control sessions are
+   * interactive and never exit on their own, and `--max-turns` is a
+   * headless-mode (`claude -p`) flag that does not apply to them — so a
+   * detached RC session that loops forever would burn plan quota indefinitely.
+   * get_claude_task_status and the background reaper kill any tmux session
+   * still running past this many seconds and mark the task `timed_out`.
+   */
+  claudeTaskTimeoutSeconds: number;
 }
 
 function expandHome(p: string): string {
@@ -154,6 +162,10 @@ export function loadConfig(): AppConfig {
       enrollToken: process.env.DASHBOARD_ENROLL_TOKEN?.trim() || null,
     },
     dbPath,
-    claudeDefaultMaxTurns: num("CLAUDE_DEFAULT_MAX_TURNS", process.env.CLAUDE_DEFAULT_MAX_TURNS, 12),
+    claudeTaskTimeoutSeconds: num(
+      "CLAUDE_TASK_TIMEOUT_SECONDS",
+      process.env.CLAUDE_TASK_TIMEOUT_SECONDS,
+      3_600,
+    ),
   };
 }
