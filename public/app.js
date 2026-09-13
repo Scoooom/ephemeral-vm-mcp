@@ -321,6 +321,46 @@ async function renderScripts() {
   }
 }
 
+// ---- Create ---------------------------------------------------------
+
+function openCreate() {
+  $("#create-status").textContent = "";
+  $("#create-cores").value = 1;
+  $("#create-memory").value = 512;
+  $("#create-disk").value = 8;
+  $("#create-backdrop").classList.add("open");
+}
+
+function closeCreate() {
+  $("#create-backdrop").classList.remove("open");
+}
+
+$("#create-open").onclick = openCreate;
+$("#create-close").onclick = closeCreate;
+$("#create-backdrop").addEventListener("click", (e) => {
+  if (e.target.id === "create-backdrop") closeCreate();
+});
+
+$("#create-submit").onclick = async () => {
+  const cores = +$("#create-cores").value;
+  const memory_mb = +$("#create-memory").value;
+  const disk_gb = +$("#create-disk").value;
+  const btn = $("#create-submit");
+  const status = $("#create-status");
+  btn.disabled = true;
+  status.textContent = "Creating… this can take a minute.";
+  try {
+    const r = await api("/vms", { method: "POST", body: JSON.stringify({ cores, memory_mb, disk_gb }) });
+    toast(`CT ${r.vmid} created (${r.ip})`);
+    closeCreate();
+    refreshCurrentTab();
+  } catch (e) {
+    status.textContent = e.message;
+  } finally {
+    btn.disabled = false;
+  }
+};
+
 // ---- Tabs / wiring ----------------------------------------------
 
 const TABS = { active: renderActive, history: renderHistory, scripts: renderScripts };

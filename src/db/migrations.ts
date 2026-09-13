@@ -141,4 +141,13 @@ export const migrations: Migration[] = [
       CREATE INDEX IF NOT EXISTS idx_claude_tasks_status ON claude_tasks(status);
     `,
   },
+  {
+    version: 5,
+    name: "track requested disk size",
+    sql: /* sql */ `
+      -- Root disk size requested at create time, in GiB. NULL for rows created
+      -- before this migration (their disk was left at the template's default).
+      ALTER TABLE vms ADD COLUMN disk_gb INTEGER;
+    `,
+  },
 ];

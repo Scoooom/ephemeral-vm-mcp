@@ -25,6 +25,7 @@ export interface VmRow {
   clone_type: "linked" | "full";
   cores: number;
   memory_mb: number;
+  disk_gb: number | null;
   node: string;
   bridge: string;
   ip: string | null;
@@ -117,6 +118,7 @@ export interface InsertVmInput {
   clone_type: "linked" | "full";
   cores: number;
   memory_mb: number;
+  disk_gb: number | null;
   node: string;
   bridge: string;
   ip: string;
@@ -155,10 +157,10 @@ export class Repo {
     const info = this.db
       .prepare(
         `INSERT INTO vms
-           (vmid, name, template_id, clone_type, cores, memory_mb, node, bridge, ip,
+           (vmid, name, template_id, clone_type, cores, memory_mb, disk_gb, node, bridge, ip,
             status, task_description, tags, owned_by)
          VALUES
-           (@vmid, @name, @template_id, @clone_type, @cores, @memory_mb, @node, @bridge, @ip,
+           (@vmid, @name, @template_id, @clone_type, @cores, @memory_mb, @disk_gb, @node, @bridge, @ip,
             'provisioning', @task_description, @tags, '${OWNER}')`,
       )
       .run(input as unknown as Record<string, unknown>);

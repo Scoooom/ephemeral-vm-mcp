@@ -30,3 +30,14 @@ export function requireOwnedVm(ctx: AppContext, vmid: number): VmRow {
   }
   return row;
 }
+
+/** Lowercase, DNS-safe hostname derived from a free-text name. */
+export function sanitizeHostname(name: string): string {
+  const h = name
+    .toLowerCase()
+    .replace(/[^a-z0-9-]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 63);
+  if (!h) throw new ToolError(`Name '${name}' has no usable characters for a hostname`);
+  return h;
+}

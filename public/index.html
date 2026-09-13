@@ -15,6 +15,7 @@
       <button data-tab="scripts">Scripts</button>
     </nav>
     <span class="spacer"></span>
+    <button class="btn primary" id="create-open">+ Create</button>
     <button class="btn" id="refresh">Refresh</button>
     <button class="btn" id="logout">Log out</button>
   </header>
@@ -33,6 +34,30 @@
     </header>
     <div class="body" id="drawer-body"></div>
   </aside>
+
+  <div class="modal-backdrop" id="create-backdrop">
+    <div class="modal">
+      <header>
+        <h2>Create container</h2>
+        <button class="btn" id="create-close">Close</button>
+      </header>
+      <div class="body">
+        <label>Cores (vCPU)
+          <input id="create-cores" type="number" min="1" max="32" step="1" value="1" />
+        </label>
+        <label>Memory (MiB)
+          <input id="create-memory" type="number" min="128" max="65536" step="128" value="512" />
+        </label>
+        <label>Disk (GiB)
+          <input id="create-disk" type="number" min="1" max="2048" step="1" value="8" />
+        </label>
+        <div class="row">
+          <button class="btn primary" id="create-submit">Create</button>
+          <span class="muted" id="create-status"></span>
+        </div>
+      </div>
+    </div>
+  </div>
 
   <div class="toast" id="toast"></div>
 

@@ -1,12 +1,12 @@
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import type { AppContext } from "../context.js";
 import { logger } from "../logger.js";
-import { requireOwnedVm, ToolError } from "../services/ownership.js";
+import { requireOwnedVm, sanitizeHostname, ToolError } from "../services/ownership.js";
 
 // Re-exported so the existing `import { ... } from "./util.js"` call sites in
 // the tool layer keep working; the definitions now live in the service layer
 // where the web API can share them.
-export { requireOwnedVm, ToolError };
+export { requireOwnedVm, sanitizeHostname, ToolError };
 
 export function textResult(text: string): CallToolResult {
   return { content: [{ type: "text", text }] };
@@ -39,17 +39,6 @@ export function handler<A>(
       return errorResult(`${name} failed: ${msg}`);
     }
   };
-}
-
-/** Lowercase, DNS-safe hostname derived from a free-text name. */
-export function sanitizeHostname(name: string): string {
-  const h = name
-    .toLowerCase()
-    .replace(/[^a-z0-9-]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 63);
-  if (!h) throw new ToolError(`Name '${name}' has no usable characters for a hostname`);
-  return h;
 }
 
 /** Truncate long command output for the tool response; full text still goes to vm_logs. */

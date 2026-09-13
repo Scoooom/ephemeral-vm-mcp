@@ -2,6 +2,7 @@ import { Router, type Response } from "express";
 import type { AppContext } from "../context.js";
 import type { LogPhase, VmRow } from "../db/repo.js";
 import { logger } from "../logger.js";
+import { createVm } from "../services/create.js";
 import { destroyVm, rebootVm, startVm, stopVm } from "../services/lifecycle.js";
 import { vmStatusWithDrift } from "../services/status.js";
 import { checkTunnelStatus } from "../services/tunnel.js";
@@ -16,6 +17,31 @@ export function apiRouter(ctx: AppContext): Router {
 
   r.get("/vms", (_req, res) => {
     res.json(ctx.repo.listActive().map(withAge));
+  });
+
+  r.post("/vms", async (req, res) => {
+    const body = req.body as { cores?: unknown; memory_mb?: unknown; disk_gb?: unknown };
+    const cores = intInRange(body.cores, 1, 32);
+    const memoryMb = intInRange(body.memory_mb, 128, 65_536);
+    const diskGb = intInRange(body.disk_gb, 1, 2_048);
+    if (cores === undefined || memoryMb === undefined || diskGb === undefined) {
+      res.status(400).json({
+        error: "cores (1-32), memory_mb (128-65536), and disk_gb (1-2048) are required integers",
+      });
+      return;
+    }
+    const name = `web-${Date.now()}`;
+    logger.info(`dashboard create vm cores=${cores} memory_mb=${memoryMb} disk_gb=${diskGb}`);
+    await handle(res, () =>
+      createVm(ctx, {
+        name,
+        task_description: "Created from the dashboard",
+        cores,
+        memory_mb: memoryMb,
+        disk_gb: diskGb,
+        tags: "dashboard-created",
+      }),
+    );
   });
 
   r.get("/history", (req, res) => {
@@ -109,6 +135,13 @@ function withAge(row: VmRow): VmRow & { age_seconds: number } {
 function parseVmid(raw: string): number {
   const n = Number(raw);
   if (!Number.isInteger(n)) throw new ToolError(`Invalid VMID '${raw}'`);
+  return n;
+}
+
+/** Coerce a JSON body field to an integer within [min, max], or undefined if invalid/missing. */
+function intInRange(raw: unknown, min: number, max: number): number | undefined {
+  const n = typeof raw === "number" ? raw : Number(raw);
+  if (!Number.isInteger(n) || n < min || n > max) return undefined;
   return n;
 }
 

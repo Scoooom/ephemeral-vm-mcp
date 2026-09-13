@@ -94,6 +94,16 @@ export class LxcApi {
     });
   }
 
+  /**
+   * Grow the container's root disk to an absolute size (e.g. `size: "8G"`).
+   * Proxmox only supports growing via this endpoint — a `size` smaller than
+   * the disk's current size is rejected (or silently ignored, backend-
+   * dependent). Returns the UPID of the (usually fast) resize task.
+   */
+  resize(vmid: number, disk: string, size: string): Promise<string> {
+    return this.client.put<string>(`${this.base(vmid)}/resize`, { disk, size });
+  }
+
   start(vmid: number): Promise<string> {
     return this.client.post<string>(`${this.base(vmid)}/status/start`);
   }
