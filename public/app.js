@@ -228,7 +228,14 @@ function wireActions(vmid) {
         } else {
           toast(`CT ${vmid}: ${r.status || r.action} ok`);
         }
-        await openDrawer(vmid);
+        // destroy/untrack make the container inactive — reloading its detail
+        // via openDrawer would just hit "not an active container" and look
+        // like the action failed, when it actually succeeded. Close instead.
+        if (act === "destroy" || act === "untrack") {
+          closeDrawer();
+        } else {
+          await openDrawer(vmid);
+        }
         refreshCurrentTab();
       } catch (e) {
         toast(e.message);
