@@ -202,6 +202,7 @@ function detailHtml(report) {
       ${task ? `<button class="btn" data-act="check-claude-task">Check task</button>` : ""}
       ${dep ? `<button class="btn" data-act="check-tunnel">Check tunnel</button>` : ""}
       <button class="btn danger" data-act="destroy">Destroy</button>
+      <button class="btn danger" data-act="untrack">Delete (records only)</button>
     </div>` : ""}
     <div id="logs"></div>`;
 }
@@ -211,6 +212,7 @@ function wireActions(vmid) {
     btn.onclick = async () => {
       const act = btn.dataset.act;
       if (act === "destroy" && !confirm(`Destroy CT ${vmid}? This permanently deletes the container.`)) return;
+      if (act === "untrack" && !confirm(`Remove CT ${vmid} from tracking? This only deletes the local record — the Proxmox container itself will NOT be touched.`)) return;
       $$("#drawer-body [data-act]").forEach((b) => (b.disabled = true));
       toast(`${act}…`);
       try {

@@ -14,6 +14,7 @@
     "typecheck": "tsc --noEmit",
     "check:proxmox": "tsx scripts/check-proxmox.ts",
     "smoke": "tsx scripts/smoke.ts",
+    "create-vm": "tsx cli/create-vm.ts",
     "inspect": "npx @modelcontextprotocol/inspector node dist/index.js"
   },
   "dependencies": {

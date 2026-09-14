@@ -56,3 +56,20 @@ export async function destroyVm(ctx: AppContext, vmid: number): Promise<DestroyR
   ctx.repo.markDestroyed(row.id);
   return { vmid, ip: row.ip };
 }
+
+/**
+ * Remove a container from local tracking WITHOUT touching Proxmox at all —
+ * no stop, no destroy. For DB rows that no longer reflect reality (e.g. the
+ * container was removed outside this tool) and just need to stop showing up
+ * as active / stop holding its IP and VMID reserved.
+ */
+export async function untrackVm(ctx: AppContext, vmid: number): Promise<{ vmid: number }> {
+  const row = requireOwnedVm(ctx, vmid);
+  ctx.repo.addLog(
+    row.id,
+    "teardown",
+    `untrack_vm: removed CT ${vmid} from tracking only — the Proxmox container itself was not touched.`,
+  );
+  ctx.repo.markDestroyed(row.id);
+  return { vmid };
+}

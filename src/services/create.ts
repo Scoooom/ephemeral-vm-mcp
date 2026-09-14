@@ -47,11 +47,9 @@ export async function createVm(ctx: AppContext, args: CreateVmInput): Promise<Cr
     );
   }
 
-  // 2. next free VMID (and make sure the target pool exists)
+  // 2. next free VMID in the configured range (and make sure the target pool exists)
   await ctx.pve.discovery.ensurePool(ctx.cfg.proxmox.pool);
-  let newid = await ctx.pve.discovery.nextId();
-  const liveVmids = new Set((await ctx.pve.lxc.list()).map((c) => c.vmid));
-  while (liveVmids.has(newid) || ctx.repo.vmidInUse(newid)) newid++;
+  const newid = await nextVmidInRange(ctx);
 
   // 3. allocate IP + claim it with the DB row, atomically
   const tagList = ["ephemeral-mcp", ...(args.tags ? args.tags.split(",").map((t) => t.trim()).filter(Boolean) : [])];
@@ -139,4 +137,24 @@ export async function createVm(ctx: AppContext, args: CreateVmInput): Promise<Cr
         `Cause: ${err instanceof Error ? err.message : String(err)}`,
     );
   }
+}
+
+/**
+ * Lowest free VMID in `ctx.cfg.proxmox.vmidRangeStart..vmidRangeEnd`.
+ * `ctx.pve.lxc.list()` and the local DB are checked first (cheap, no extra
+ * round trip); `idFree` is only called for candidates neither already knows
+ * about, and is authoritative cluster-wide (catches other nodes and QEMU
+ * VMs, which the other two checks can't see).
+ */
+async function nextVmidInRange(ctx: AppContext): Promise<number> {
+  const { vmidRangeStart, vmidRangeEnd } = ctx.cfg.proxmox;
+  const liveVmids = new Set((await ctx.pve.lxc.list()).map((c) => c.vmid));
+  for (let id = vmidRangeStart; id <= vmidRangeEnd; id++) {
+    if (liveVmids.has(id) || ctx.repo.vmidInUse(id)) continue;
+    if (await ctx.pve.discovery.idFree(id)) return id;
+  }
+  throw new ToolError(
+    `No free VMID in the configured range ${vmidRangeStart}-${vmidRangeEnd}. ` +
+      `Untrack or destroy some containers, or widen EPHEMERAL_VMID_RANGE_START/END.`,
+  );
 }

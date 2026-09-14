@@ -23,6 +23,9 @@ export interface ProxmoxConfig {
   templateId: number;
   /** resource pool every ephemeral container is placed in ('' disables pool assignment) */
   pool: string;
+  /** VMID allocation range for newly created ephemeral containers (inclusive). */
+  vmidRangeStart: number;
+  vmidRangeEnd: number;
 }
 
 export interface NetworkConfig {
@@ -132,6 +135,8 @@ export function loadConfig(): AppConfig {
       storage: process.env.PROXMOX_STORAGE ?? "media",
       templateId: num("PROXMOX_TEMPLATE_ID", process.env.PROXMOX_TEMPLATE_ID, 113),
       pool: process.env.EPHEMERAL_POOL ?? "ephemeral",
+      vmidRangeStart: num("EPHEMERAL_VMID_RANGE_START", process.env.EPHEMERAL_VMID_RANGE_START, 200),
+      vmidRangeEnd: num("EPHEMERAL_VMID_RANGE_END", process.env.EPHEMERAL_VMID_RANGE_END, 299),
     },
     network: {
       bridge: process.env.EPHEMERAL_BRIDGE ?? "vmbr2",

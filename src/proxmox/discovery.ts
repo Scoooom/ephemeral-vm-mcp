@@ -34,6 +34,20 @@ export class Discovery {
     return Number(raw);
   }
 
+  /**
+   * True if `vmid` is free cluster-wide (across all nodes, LXC and QEMU).
+   * `/cluster/nextid?vmid=X` is Proxmox's documented way to probe a specific
+   * ID: it succeeds if free, rejects with "VM X already exists" if not.
+   */
+  async idFree(vmid: number): Promise<boolean> {
+    try {
+      await this.client.get<string>("/cluster/nextid", { vmid });
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
   /** Create the resource pool if it does not already exist (idempotent). */
   async ensurePool(poolid: string): Promise<void> {
     if (!poolid) return;

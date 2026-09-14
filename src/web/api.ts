@@ -3,7 +3,7 @@ import type { AppContext } from "../context.js";
 import type { LogPhase, VmRow } from "../db/repo.js";
 import { logger } from "../logger.js";
 import { createVm } from "../services/create.js";
-import { destroyVm, rebootVm, startVm, stopVm } from "../services/lifecycle.js";
+import { destroyVm, rebootVm, startVm, stopVm, untrackVm } from "../services/lifecycle.js";
 import { vmStatusWithDrift } from "../services/status.js";
 import { checkTunnelStatus } from "../services/tunnel.js";
 import { getClaudeTaskStatus } from "../services/claudeTask.js";
@@ -101,6 +101,7 @@ export function apiRouter(ctx: AppContext): Router {
     ["stop", stopVm],
     ["reboot", rebootVm],
     ["destroy", destroyVm],
+    ["untrack", untrackVm],
   ] as const) {
     r.post(`/vms/:vmid/${verb}`, async (req, res) => {
       const vmid = parseVmid(req.params.vmid);
