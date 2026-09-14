@@ -1,5 +1,9 @@
 // Ephemeral LXC dashboard — vanilla JS, talks to /api/*.
 
+// Kept in sync with MIN_DISK_GB in src/services/create.ts — the template's
+// root disk can't be shrunk, so this is the practical floor server-side too.
+const MIN_DISK_GB = 25;
+
 const $ = (sel, root = document) => root.querySelector(sel);
 const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
 
@@ -329,7 +333,7 @@ function openCreate() {
   $("#create-status").textContent = "";
   $("#create-cores").value = 1;
   $("#create-memory").value = 512;
-  $("#create-disk").value = 8;
+  $("#create-disk").value = MIN_DISK_GB;
   $("#create-backdrop").classList.add("open");
 }
 
@@ -347,8 +351,15 @@ $("#create-submit").onclick = async () => {
   const cores = +$("#create-cores").value;
   const memory_mb = +$("#create-memory").value;
   const disk_gb = +$("#create-disk").value;
-  const btn = $("#create-submit");
   const status = $("#create-status");
+  // The inputs aren't inside a <form>, so the min="" attribute is cosmetic
+  // only (spinner arrows respect it, typing past it doesn't) — check for
+  // real here rather than relying on the server round trip to catch it.
+  if (disk_gb < MIN_DISK_GB) {
+    status.textContent = `Disk must be at least ${MIN_DISK_GB} GiB (the template's root disk can't be shrunk).`;
+    return;
+  }
+  const btn = $("#create-submit");
   btn.disabled = true;
   status.textContent = "Creating… this can take a minute.";
   try {

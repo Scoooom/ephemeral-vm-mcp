@@ -155,3 +155,14 @@ export function ipFromNetConfig(net?: string): string | null {
   if (!m || m[1] === "dhcp") return null;
   return m[1].split("/")[0];
 }
+
+/**
+ * Extract the `size=` value (in GiB) from a `rootfs` config line, e.g.
+ * `"local-lvm:vm-113-disk-0,size=25G"` -> `25`. Proxmox always reports whole
+ * GiB for LXC root disks; returns null if the line can't be parsed.
+ */
+export function rootfsSizeGb(rootfs?: string): number | null {
+  if (!rootfs) return null;
+  const m = /(?:^|,)size=(\d+)G/.exec(rootfs);
+  return m ? Number(m[1]) : null;
+}

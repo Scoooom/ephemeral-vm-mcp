@@ -2,7 +2,7 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import type { AppContext } from "../context.js";
 import { OWNER } from "../db/repo.js";
-import { createVm } from "../services/create.js";
+import { createVm, MIN_DISK_GB } from "../services/create.js";
 import { destroyVm, rebootVm, startVm, stopVm } from "../services/lifecycle.js";
 import { handler, jsonResult, textResult } from "./util.js";
 
@@ -44,10 +44,12 @@ function registerCloneVm(server: McpServer, ctx: AppContext): void {
         disk_gb: z
           .number()
           .int()
-          .min(1)
+          .min(MIN_DISK_GB)
           .max(2_048)
           .optional()
-          .describe("Absolute root disk size in GiB. Omit to leave the template's default size (grow-only)."),
+          .describe(
+            `Absolute root disk size in GiB, minimum ${MIN_DISK_GB} (the template's disk, grow-only). Omit to leave it at ${MIN_DISK_GB}G.`,
+          ),
         tags: z.string().optional().describe("Comma-separated extra Proxmox tags, e.g. 'calendar-app'."),
       },
       annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },

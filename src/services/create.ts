@@ -1,5 +1,6 @@
 import type { AppContext } from "../context.js";
 import { allocateIp, buildNet0 } from "../net/ipalloc.js";
+import { rootfsSizeGb } from "../proxmox/lxc.js";
 import { execProxmoxTask } from "../proxmox/tasks.js";
 import { execCommand } from "../ssh/exec.js";
 import { sanitizeHostname, ToolError } from "./ownership.js";
@@ -9,6 +10,15 @@ import { sanitizeHostname, ToolError } from "./ownership.js";
  * Shared by the `clone_vm` MCP tool and the web dashboard's create endpoint
  * so there is exactly one place that does this multi-step provisioning.
  */
+
+/**
+ * Proxmox can't shrink an LXC root disk, and the template's rootfs is 25G —
+ * so 25 is the practical floor for `disk_gb`. Requests below it are
+ * rejected at the input boundary (schema / API / UI) rather than silently
+ * rounded up, so the caller isn't surprised by a bigger disk than they asked
+ * for.
+ */
+export const MIN_DISK_GB = 25;
 
 export interface CreateVmInput {
   name: string;
@@ -36,6 +46,9 @@ export async function createVm(ctx: AppContext, args: CreateVmInput): Promise<Cr
   const cores = args.cores ?? 1;
   const memoryMb = args.memory_mb ?? 512;
   const diskGb = args.disk_gb;
+  if (diskGb !== undefined && diskGb < MIN_DISK_GB) {
+    throw new ToolError(`disk_gb must be at least ${MIN_DISK_GB} (the template's root disk can't be shrunk).`);
+  }
   const hostname = sanitizeHostname(args.name);
 
   // 1. verify the template
@@ -100,12 +113,29 @@ export async function createVm(ctx: AppContext, args: CreateVmInput): Promise<Cr
       description,
     });
 
-    // 5b. grow the root disk, if a size was requested. Must happen before
-    // start — resize only supports growing, and doing it while stopped
-    // avoids any online-resize quirks on the underlying storage.
+    // 5b. grow the root disk, if a bigger size was requested. Must happen
+    // before start — resize only supports growing, and doing it while
+    // stopped avoids any online-resize quirks on the underlying storage.
+    // Proxmox rejects (or no-ops, backend-dependent) a resize to the disk's
+    // current size or smaller, so check first rather than let that surface
+    // as a failure — a request equal to (or below) the template's default
+    // is a legitimate way to say "leave it as-is", not an error.
     if (diskGb !== undefined) {
-      const resizeUpid = await ctx.pve.lxc.resize(newid, "rootfs", `${diskGb}G`);
-      await execProxmoxTask(ctx.pve.client, resizeUpid, { timeoutMs: 120_000 });
+      const newConfig = await ctx.pve.lxc.getConfig(newid);
+      const currentGb = rootfsSizeGb(newConfig.rootfs);
+      if (currentGb === null) {
+        ctx.repo.addLog(row.id, "clone", `Could not parse current disk size from rootfs='${newConfig.rootfs}' — skipping resize.`);
+      } else if (diskGb > currentGb) {
+        const resizeUpid = await ctx.pve.lxc.resize(newid, "rootfs", `${diskGb}G`);
+        await execProxmoxTask(ctx.pve.client, resizeUpid, { timeoutMs: 120_000 });
+      } else if (diskGb < currentGb) {
+        ctx.repo.addLog(
+          row.id,
+          "clone",
+          `Requested disk_gb=${diskGb} is smaller than the template's ${currentGb}G — Proxmox can't shrink, leaving it at ${currentGb}G.`,
+        );
+      }
+      // diskGb === currentGb: already the requested size, nothing to do.
     }
 
     // 6. start

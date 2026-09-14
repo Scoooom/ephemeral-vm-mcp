@@ -2,7 +2,7 @@ import { Router, type Response } from "express";
 import type { AppContext } from "../context.js";
 import type { LogPhase, VmRow } from "../db/repo.js";
 import { logger } from "../logger.js";
-import { createVm } from "../services/create.js";
+import { createVm, MIN_DISK_GB } from "../services/create.js";
 import { destroyVm, rebootVm, startVm, stopVm, untrackVm } from "../services/lifecycle.js";
 import { vmStatusWithDrift } from "../services/status.js";
 import { checkTunnelStatus } from "../services/tunnel.js";
@@ -23,10 +23,10 @@ export function apiRouter(ctx: AppContext): Router {
     const body = req.body as { cores?: unknown; memory_mb?: unknown; disk_gb?: unknown };
     const cores = intInRange(body.cores, 1, 32);
     const memoryMb = intInRange(body.memory_mb, 128, 65_536);
-    const diskGb = intInRange(body.disk_gb, 1, 2_048);
+    const diskGb = intInRange(body.disk_gb, MIN_DISK_GB, 2_048);
     if (cores === undefined || memoryMb === undefined || diskGb === undefined) {
       res.status(400).json({
-        error: "cores (1-32), memory_mb (128-65536), and disk_gb (1-2048) are required integers",
+        error: `cores (1-32), memory_mb (128-65536), and disk_gb (${MIN_DISK_GB}-2048) are required integers`,
       });
       return;
     }
